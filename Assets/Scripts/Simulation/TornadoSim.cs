@@ -35,11 +35,11 @@ namespace Simulation
         
         [Header("Tornado")]
         public float2 tornado; float2 _initialTornado;
-        public float tornadoWindShear = 1f;
-        public float tornadoWindShearJitter = 0.01f;
+        [Range(0f, 1f)] public float tornadoWindShear = 1f;
+        [Range(0f, 1f)] public float tornadoWindShearJitter = 0.01f;
         
         [Header("Despawn")]
-        public int despawnTime = -1;
+        public int despawnTime = -1; // TODO: Add a check box to enable or disable instead of having negative for off
 
         [Header("References")]
         public Spawner spawner;
@@ -181,6 +181,11 @@ namespace Simulation
             if (seed == 0) seed = 1; // Unity Random doesn't work with seed == 0
             temperature = math.max(temperature, dewPoint);
             dewPoint = math.min(temperature, dewPoint);
+
+            if (maxTimestepFPS < math.EPSILON) maxTimestepFPS = math.EPSILON;
+            if (iterationsPerFrame < 1) iterationsPerFrame = 1;
+            if (slowTimeScale < math.EPSILON) slowTimeScale = math.EPSILON;
+            if (normalTimeScale < math.EPSILON) normalTimeScale = math.EPSILON;
         }
 
         void OnDestroy()
