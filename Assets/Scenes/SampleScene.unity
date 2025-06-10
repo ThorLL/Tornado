@@ -387,8 +387,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 14c0a3b3747c46e18cccc0dbc9243fef, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  temperature: 15
-  dewPoint: 13.5
+  maxTimestepFPS: 60
+  temperature: 25
+  dewPoint: 23
+  liftCoefficient: 0.125
+  windCoefficient: 5
+  dragCoefficient: 0.5
+  pressureGradientCoefficient: 64
   tornado:
     x: 0
     y: 0

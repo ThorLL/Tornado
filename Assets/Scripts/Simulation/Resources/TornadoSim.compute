@@ -1,4 +1,5 @@
-﻿#include "Assets/Scripts/Simulation/Resources/TornadoMath.hlsl"
+﻿#include "Assets/Scripts/Compute/Util/Math.hlsl"
+#include "Assets/Scripts/Simulation/Resources/TornadoMath.hlsl"
 
 //------------------------------------------------------------
 // Structs
@@ -21,11 +22,18 @@ float DeltaTime;
 float GroundTemperatureKelvin;
 float DewPoint;
 
+// Coefficients
+float LiftCoefficient;
+float DragCoefficient;
+float WindCoefficient;
+float PressureGradientCoefficient;
+
 // Tornado
 float2 Tornado;
 
 // Precomputed tornado properties
 float TornadoHeight;
+float StormTop;
 float pcf; // CoreFunnelPressure
 
 //------------------------------------------------------------
@@ -51,6 +59,7 @@ RWStructuredBuffer<float3> Velocities;
 //------------------------------------------------------------
 void SampleEnvironment(uint id, float3 position,
     out float dist,
+    out float distanceRatio,
     out float pressure,
     out float airDensity,
     out float windSpeed,
@@ -80,15 +89,80 @@ void SampleEnvironment(uint id, float3 position,
     dist = distance(Tornado, position.xz);
     
     bool inSideCore = dist < tornadoRadius;
-    float ratio = inSideCore ? dist / tornadoRadius : tornadoRadius / dist;
+    distanceRatio = inSideCore ? dist / tornadoRadius : tornadoRadius / dist;
 
-    windSpeed = WindSpeed(maxWindSpeed, ratio);
-    pressureDeficit = PressureDeficit(maxPressuresDeficit, ratio, inSideCore);
+    windSpeed = WindSpeed(maxWindSpeed, distanceRatio);
+    pressureDeficit = PressureDeficit(maxPressuresDeficit, distanceRatio, inSideCore);
 }
 
-float3 CalculateForces(uint id, float3 position, float3 velocity)
+float3 CalculateForces(uint id, float3 position, float3 velocity,
+    float dist,
+    float distanceRatio,
+    float pressure,
+    float airDensity,
+    float windSpeed,
+    float pressureDeficit,
+    float tornadoRadius
+)
 {
-    return float3(0.0f, 0.0f, 0.0f);
+    // Directional vectors
+    float3 dirVel = normalize(velocity);
+    float2 radial = normalize(position.xz - Tornado);
+    float3 radial3D = float3(radial.x, 0, radial.y);
+    float3 negRadial3D = -radial3D;
+    float3 tangent = float3(negRadial3D.z, 0, -negRadial3D.x);
+
+    float halfWAirDensity = 0.5f * airDensity;
+    
+    float3 forces = float3(0.0f, 0.0f, 0.0f);
+
+    // Gravity
+    forces += float3(0.0f, -Gravity, 0.0f);
+
+    // Lift and drag velocity impact
+    float velocitySq = velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z;
+    float velocityMagnitude = halfWAirDensity * velocitySq;
+
+    if (velocityMagnitude > Epsilon)
+    {
+        // Lift
+        float liftFrac = saturate((StormTop - position.y) / (StormTop - TornadoHeight));
+        forces.y += velocityMagnitude * LiftCoefficient * liftFrac;
+
+        // Drag
+        forces += -dirVel * velocityMagnitude * DragCoefficient;
+    }
+
+    // Wind
+    float windSpeedSq = windSpeed * windSpeed;
+    float windMagnitude = halfWAirDensity * windSpeedSq;
+    if (windMagnitude > Epsilon)
+    {
+        forces += tangent * windMagnitude * WindCoefficient;
+    }
+
+    // Inwards pressure gradient
+    if (position.y < TornadoHeight && dist > tornadoRadius)
+    {
+        forces += negRadial3D * (pressureDeficit / dist) * PressureGradientCoefficient;
+    }
+    
+    float midHeight = TornadoHeight * 0.5;
+    if (position.y > midHeight)
+    {
+        // Inner cell down drawn
+        if (position.y < TornadoHeight && dist < tornadoRadius)
+        {
+            float heightRatio = smoothstep(midHeight, TornadoHeight, position.y);
+            forces.y -= LiftCoefficient * 0.5 * heightRatio * (1.0 - distanceRatio);
+        }
+
+        // Move particles at the top outwards
+        float outRamp = distanceRatio * smoothstep(midHeight, StormTop, position.y);
+        forces += -negRadial3D * PressureGradientCoefficient * outRamp;
+    }
+    
+    return forces;
 }
 
 void HandleBounds(inout float3 position, inout float3 velocity)
@@ -109,10 +183,10 @@ void UpdateParticles (uint3 id : SV_DispatchThreadID)
 
     HandleBounds(position, velocity);
 
-    float dist, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius;
-    SampleEnvironment(id.x, position, dist, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
+    float dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius;
+    SampleEnvironment(id.x, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
 
-    float3 forces = CalculateForces(id.x, position, velocity);
+    float3 forces = CalculateForces(id.x, position, velocity, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
 
     velocity += DeltaTime * airDensity * forces;
 

@@ -14,6 +14,12 @@ namespace Simulation
         [Range(0f, 90f)] public float temperature = 15;
         [Range(0f, 90f)] public float dewPoint = 13.5f;
 
+        [Header("Coefficients")]
+        public float liftCoefficient = 0.125f;
+        public float windCoefficient = 5f;
+        public float dragCoefficient = 0.5f;
+        public float pressureGradientCoefficient = 64f;
+        
         [Header("Tornado")]
         public float2 tornado;
         
@@ -62,8 +68,13 @@ namespace Simulation
             // Precompute static tornado values
             float groundTemperatureKelvin = TMath.CToKelvin(temperature);
             float coreFunnelPressure = TMath.CoreFunnelPressure(groundTemperatureKelvin, dewPoint);
-            float tornadoHeight = TMath.PressureToAltitude(coreFunnelPressure, groundTemperatureKelvin);
+            float groundAirDensity = TMath.AirDensity(groundTemperatureKelvin, dewPoint, TMath.AtmosphericPressure);
+            float maxWindSpeed = TMath.MaxWindSpeed(TMath.AtmosphericPressure, groundAirDensity, coreFunnelPressure);
+            float maxPressuresDeficit = TMath.MaxPressureDeficit(maxWindSpeed, groundAirDensity);
             
+            float tornadoHeight = TMath.PressureToAltitude(coreFunnelPressure, groundTemperatureKelvin);
+            float stormTop = TMath.PressureToAltitude(coreFunnelPressure - maxPressuresDeficit / 2, groundTemperatureKelvin);
+
             // Run time
             _simulation.SetFloat("DeltaTime", stepDeltaTime);
             
@@ -71,12 +82,18 @@ namespace Simulation
             _simulation.SetFloat("GroundTemperatureKelvin", groundTemperatureKelvin);
             _simulation.SetFloat("DewPoint", dewPoint);
             
+            // Coefficients
+            _simulation.SetFloat("LiftCoefficient", liftCoefficient);
+            _simulation.SetFloat("WindCoefficient", windCoefficient);
+            _simulation.SetFloat("DragCoefficient", dragCoefficient);
+            _simulation.SetFloat("PressureGradientCoefficient", pressureGradientCoefficient);
+
             // Tornado
             _simulation.SetFloats("Tornado", tornado.x, tornado.y);
             
             // Precomputed tornado properties
-            
             _simulation.SetFloat("TornadoHeight", tornadoHeight);
+            _simulation.SetFloat("StormTop", stormTop);
             _simulation.SetFloat("pcf", coreFunnelPressure);
         }
         
