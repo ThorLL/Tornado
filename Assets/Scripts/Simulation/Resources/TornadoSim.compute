@@ -11,6 +11,9 @@
 // Uniform parameters
 //------------------------------------------------------------
 uint numParticles;
+
+float DeltaTime;
+
 //------------------------------------------------------------
 // Input Buffers
 //------------------------------------------------------------
@@ -33,6 +36,21 @@ RWStructuredBuffer<float3> Velocities;
 // Helper Functions
 //------------------------------------------------------------
 
+void SampleEnvironment(uint id, float3 position)
+{
+    
+}
+
+float3 CalculateForces(uint id, float3 position, float3 velocity)
+{
+    return float3(0.0f, 0.0f, 0.0f);
+}
+
+void HandleBounds(inout float3 position, inout float3 velocity)
+{
+    if (position.y < 1) position.y = 1;
+}
+
 //------------------------------------------------------------
 // Kernel 0: Updates particle positions and velocities based on tornado dynamics
 //------------------------------------------------------------
@@ -40,4 +58,22 @@ RWStructuredBuffer<float3> Velocities;
 void UpdateParticles (uint3 id : SV_DispatchThreadID)
 {
     if (id.x >= numParticles) return;
+
+    float3 position = Positions[id.x];
+    float3 velocity = Velocities[id.x];
+
+    HandleBounds(position, velocity);
+
+    float mass = 1.0f;
+    
+    SampleEnvironment(id.x, position);
+
+    float3 forces = CalculateForces(id.x, position, velocity);
+
+    velocity += DeltaTime * mass * forces;
+
+    if (length(velocity) > 256.0f) velocity = normalize(velocity) * 256.0f;
+    
+    Velocities[id.x] = velocity;
+    Positions[id.x] = position + velocity * DeltaTime;
 }

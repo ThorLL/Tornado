@@ -7,6 +7,9 @@ namespace Simulation
 {
     public class TornadoSim : MonoBehaviour
     {
+        [Header("Runtime")]
+        public float maxTimestepFPS = 60;
+        
         [Header("Environment")]
         [Range(0f, 90f)] public float temperature = 15;
         [Range(0f, 90f)] public float dewPoint = 13.5f;
@@ -23,7 +26,6 @@ namespace Simulation
         
         void Start()
         {
-
             ComputeHelper.LoadShader(ref _simulation, "TornadoSim");
             Initialise();
         }
@@ -43,6 +45,26 @@ namespace Simulation
             _simulation.SetBuffer(0, "Velocities", VelocityBuffer);
             
             _simulation.SetInt("numParticles", PositionBuffer.count);
+            
+            UpdateSettings(maxTimestepFPS > 0 ? 1 / maxTimestepFPS : math.EPSILON);
+        }
+        
+        void Update()
+        {
+            float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
+            float dt = Mathf.Min(Time.deltaTime, maxDeltaTime);
+            UpdateSettings(dt);
+            RunSimulationFrame();
+        }
+        
+        void UpdateSettings(float stepDeltaTime)
+        {
+            _simulation.SetFloat("DeltaTime", stepDeltaTime);
+        }
+        
+        void RunSimulationFrame()
+        {
+            _simulation.Run(0, PositionBuffer.count);
         }
 
         void OnDrawGizmos()
