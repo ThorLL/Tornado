@@ -21,12 +21,14 @@ float DeltaTime;
 // Environment
 float GroundTemperatureKelvin;
 float DewPoint;
+float3 EnvWind;
 
 // Coefficients
 float LiftCoefficient;
 float DragCoefficient;
 float WindCoefficient;
 float PressureGradientCoefficient;
+float WindShearStrength;
 
 // Tornado
 float2 Tornado;
@@ -140,6 +142,9 @@ float3 CalculateForces(uint id, float3 position, float3 velocity,
     {
         forces += tangent * windMagnitude * WindCoefficient;
     }
+
+    // Wind shear
+    forces += EnvWind * pow(abs(position.y), WindShearStrength);
 
     // Inwards pressure gradient
     if (position.y < TornadoHeight && dist > tornadoRadius)

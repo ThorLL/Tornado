@@ -7,21 +7,28 @@ namespace Simulation
 {
     public class TornadoSim : MonoBehaviour
     {
+        [Header("General")] 
+        public uint seed = 1;
+        
         [Header("Runtime")]
         public float maxTimestepFPS = 60;
         
         [Header("Environment")]
         [Range(0f, 90f)] public float temperature = 15;
         [Range(0f, 90f)] public float dewPoint = 13.5f;
+        public float3 wind = new(-2, -1, -2);
 
         [Header("Coefficients")]
         public float liftCoefficient = 0.125f;
         public float windCoefficient = 5f;
         public float dragCoefficient = 0.5f;
         public float pressureGradientCoefficient = 64f;
+        public float windShearStrength = 0.14f;
         
         [Header("Tornado")]
         public float2 tornado;
+        public float tornadoWindShear = 1f;
+        public float tornadoWindShearJitter = 0.01f;
         
         [Header("References")]
         public Spawner spawner;
@@ -30,8 +37,11 @@ namespace Simulation
         public ComputeBuffer PositionBuffer;
         public ComputeBuffer VelocityBuffer;
         
+        Unity.Mathematics.Random _prng;
+        
         void Start()
         {
+            _prng = new (seed);
             ComputeHelper.LoadShader(ref _simulation, "TornadoSim");
             Initialise();
         }
@@ -81,14 +91,17 @@ namespace Simulation
             // Environment
             _simulation.SetFloat("GroundTemperatureKelvin", groundTemperatureKelvin);
             _simulation.SetFloat("DewPoint", dewPoint);
-            
+            _simulation.SetFloats("EnvWind", wind.x, wind.y, wind.z);
+
             // Coefficients
             _simulation.SetFloat("LiftCoefficient", liftCoefficient);
             _simulation.SetFloat("WindCoefficient", windCoefficient);
             _simulation.SetFloat("DragCoefficient", dragCoefficient);
             _simulation.SetFloat("PressureGradientCoefficient", pressureGradientCoefficient);
+            _simulation.SetFloat("WindShearStrength", windShearStrength);
 
             // Tornado
+            tornado += (tornadoWindShearJitter * _prng.NextFloat2Direction() + tornadoWindShear * math.normalizesafe(wind.xz)) * stepDeltaTime;
             _simulation.SetFloats("Tornado", tornado.x, tornado.y);
             
             // Precomputed tornado properties
@@ -126,7 +139,14 @@ namespace Simulation
                 GizmosExtra.DrawWireCircle(new Vector3(tornado.x, i, tornado.y), radius);
             }
         }
-        
+
+        void OnValidate()
+        {
+            if (seed == 0) seed = 1; // Unity Random doesn't work with seed == 0
+            temperature = math.max(temperature, dewPoint);
+            dewPoint = math.min(temperature, dewPoint);
+        }
+
         void OnDestroy()
         {
             PositionBuffer.Release();
