@@ -9,6 +9,7 @@ namespace Simulation
     {
         [Header("General")] 
         public uint seed = 1;
+        public bool restart;
         
         [Header("Runtime")]
         public bool pause;
@@ -33,7 +34,7 @@ namespace Simulation
         public float windShearStrength = 0.14f;
         
         [Header("Tornado")]
-        public float2 tornado;
+        public float2 tornado; float2 _initialTornado;
         public float tornadoWindShear = 1f;
         public float tornadoWindShearJitter = 0.01f;
         
@@ -52,13 +53,14 @@ namespace Simulation
         
         void Start()
         {
-            _prng = new (seed);
+            _initialTornado = tornado;
             ComputeHelper.LoadShader(ref _simulation, "TornadoSim");
             Initialise();
         }
 
         void Initialise()
         {
+            _prng = new (seed);
             if (!spawner) return;
 
             PositionBuffer?.Release();
@@ -84,7 +86,15 @@ namespace Simulation
         
         void Update()
         {
+            if (restart) // TODO: Change restart to a button
+            {
+                tornado = _initialTornado;
+                Initialise();
+                restart = false;
+            }
+
             if (pause) return;
+
             float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
             float dt = Mathf.Min(Time.deltaTime, maxDeltaTime);
             dt *= ActiveTimeScale;
