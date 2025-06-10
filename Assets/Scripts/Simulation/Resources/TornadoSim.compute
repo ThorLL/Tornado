@@ -1,4 +1,6 @@
-﻿//------------------------------------------------------------
+﻿#include "Assets/Scripts/Simulation/Resources/TornadoMath.hlsl"
+
+//------------------------------------------------------------
 // Structs
 //------------------------------------------------------------
 
@@ -12,7 +14,19 @@
 //------------------------------------------------------------
 uint numParticles;
 
+// Run time
 float DeltaTime;
+
+// Environment
+float GroundTemperatureKelvin;
+float DewPoint;
+
+// Tornado
+float2 Tornado;
+
+// Precomputed tornado properties
+float TornadoHeight;
+float pcf; // CoreFunnelPressure
 
 //------------------------------------------------------------
 // Input Buffers
@@ -35,10 +49,41 @@ RWStructuredBuffer<float3> Velocities;
 //------------------------------------------------------------
 // Helper Functions
 //------------------------------------------------------------
-
-void SampleEnvironment(uint id, float3 position)
+void SampleEnvironment(uint id, float3 position,
+    out float dist,
+    out float pressure,
+    out float airDensity,
+    out float windSpeed,
+    out float pressureDeficit,
+    out float tornadoRadius
+)
 {
+    float altitudinalTemperature = TemperatureAtAltitude(position.y, GroundTemperatureKelvin);
+    float altitudinalDewPoint = DewPointAtAltitude(position.y, DewPoint);
+    pressure = AltitudeToPressure(position.y, GroundTemperatureKelvin);
     
+    airDensity = AirDensity(altitudinalTemperature, altitudinalDewPoint, pressure);
+
+    float maxWindSpeed;
+    if (position.y < TornadoHeight)
+    {
+        maxWindSpeed = MaxWindSpeed(pressure, airDensity, pcf);
+    }
+    else
+    {
+        maxWindSpeed = 0.0f; // TODO figure out what the max wind speed is above the tornado
+    }
+     
+    float maxPressuresDeficit = MaxPressureDeficit(maxWindSpeed, airDensity);
+    tornadoRadius = CoreRadius(pressure, pcf, maxPressuresDeficit, maxWindSpeed, GroundTemperatureKelvin);
+
+    dist = distance(Tornado, position.xz);
+    
+    bool inSideCore = dist < tornadoRadius;
+    float ratio = inSideCore ? dist / tornadoRadius : tornadoRadius / dist;
+
+    windSpeed = WindSpeed(maxWindSpeed, ratio);
+    pressureDeficit = PressureDeficit(maxPressuresDeficit, ratio, inSideCore);
 }
 
 float3 CalculateForces(uint id, float3 position, float3 velocity)
@@ -64,13 +109,12 @@ void UpdateParticles (uint3 id : SV_DispatchThreadID)
 
     HandleBounds(position, velocity);
 
-    float mass = 1.0f;
-    
-    SampleEnvironment(id.x, position);
+    float dist, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius;
+    SampleEnvironment(id.x, position, dist, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
 
     float3 forces = CalculateForces(id.x, position, velocity);
 
-    velocity += DeltaTime * mass * forces;
+    velocity += DeltaTime * airDensity * forces;
 
     if (length(velocity) > 256.0f) velocity = normalize(velocity) * 256.0f;
     

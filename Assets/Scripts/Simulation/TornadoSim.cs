@@ -59,7 +59,25 @@ namespace Simulation
         
         void UpdateSettings(float stepDeltaTime)
         {
+            // Precompute static tornado values
+            float groundTemperatureKelvin = TMath.CToKelvin(temperature);
+            float coreFunnelPressure = TMath.CoreFunnelPressure(groundTemperatureKelvin, dewPoint);
+            float tornadoHeight = TMath.PressureToAltitude(coreFunnelPressure, groundTemperatureKelvin);
+            
+            // Run time
             _simulation.SetFloat("DeltaTime", stepDeltaTime);
+            
+            // Environment
+            _simulation.SetFloat("GroundTemperatureKelvin", groundTemperatureKelvin);
+            _simulation.SetFloat("DewPoint", dewPoint);
+            
+            // Tornado
+            _simulation.SetFloats("Tornado", tornado.x, tornado.y);
+            
+            // Precomputed tornado properties
+            
+            _simulation.SetFloat("TornadoHeight", tornadoHeight);
+            _simulation.SetFloat("pcf", coreFunnelPressure);
         }
         
         void RunSimulationFrame()
