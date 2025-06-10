@@ -1,11 +1,19 @@
 ﻿using UnityEngine;
 using Compute;
 using Unity.Mathematics;
+using TMath = Tornado.Math;
 
 namespace Simulation
 {
     public class TornadoSim : MonoBehaviour
     {
+        [Header("Environment")]
+        [Range(0f, 90f)] public float temperature = 15;
+        [Range(0f, 90f)] public float dewPoint = 13.5f;
+
+        [Header("Tornado")]
+        public float2 tornado;
+        
         [Header("References")]
         public Spawner spawner;
         ComputeShader _simulation;
@@ -37,6 +45,31 @@ namespace Simulation
             _simulation.SetInt("numParticles", PositionBuffer.count);
         }
 
+        void OnDrawGizmos()
+        {
+            if (Application.isPlaying) return;
+
+            float groundTemperatureKelvin = TMath.CToKelvin(temperature);
+            float coreFunnelPressure = TMath.CoreFunnelPressure(groundTemperatureKelvin, dewPoint);
+            float tornadoHeight = TMath.PressureToAltitude(coreFunnelPressure, groundTemperatureKelvin);
+
+            // draw tornado
+            for (int i = 0; i < tornadoHeight; i++)
+            {
+                float altitudinalTemperature = TMath.TemperatureAtAltitude(i, groundTemperatureKelvin);
+                float altitudinalDewPoint = TMath.DewPointAtAltitude(i, dewPoint);
+                float pressure = TMath.AltitudeToPressure(i, groundTemperatureKelvin);
+                float airDensity = TMath.AirDensity(altitudinalTemperature, altitudinalDewPoint, pressure);
+                float maxWindSpeed = TMath.MaxWindSpeed(pressure, airDensity, coreFunnelPressure);
+                float maxPressuresDeficit = TMath.MaxPressureDeficit(maxWindSpeed, airDensity);
+                float radius = TMath.CoreRadius(pressure, coreFunnelPressure, maxPressuresDeficit, maxWindSpeed, groundTemperatureKelvin);
+                var color = math.lerp(new float3(1, 0.5f, 0), new float3(0, 0, 1), i / tornadoHeight);
+                Gizmos.color = new Color(color.x, color.y, color.z);
+
+                GizmosExtra.DrawWireCircle(new Vector3(tornado.x, i, tornado.y), radius);
+            }
+        }
+        
         void OnDestroy()
         {
             PositionBuffer.Release();
