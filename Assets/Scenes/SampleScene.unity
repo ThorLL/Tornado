@@ -399,6 +399,7 @@ MonoBehaviour:
   windCoefficient: 5
   dragCoefficient: 0.5
   pressureGradientCoefficient: 64
+  windShearStrength: 0.14
   tornado:
     x: 0
     y: 0
