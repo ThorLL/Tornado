@@ -12,6 +12,12 @@ namespace Simulation
         
         [Header("Runtime")]
         public float maxTimestepFPS = 60;
+        public int iterationsPerFrame = 3;
+        public bool slowMode;
+        public float slowTimeScale = 0.1f;
+        public float normalTimeScale = 1f;
+    
+        float ActiveTimeScale => slowMode ? slowTimeScale : normalTimeScale;
         
         [Header("Environment")]
         [Range(0f, 90f)] public float temperature = 15;
@@ -79,7 +85,8 @@ namespace Simulation
         {
             float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
             float dt = Mathf.Min(Time.deltaTime, maxDeltaTime);
-            UpdateSettings(dt);
+            dt *= ActiveTimeScale;
+            UpdateSettings(dt / iterationsPerFrame);
             RunSimulationFrame();
         }
         
@@ -126,7 +133,10 @@ namespace Simulation
         
         void RunSimulationFrame()
         {
-            _simulation.Run(0, PositionBuffer.count);
+            for (int i = 0; i < iterationsPerFrame; i++)
+            {
+                _simulation.Run(0, PositionBuffer.count);
+            }
         }
 
         void OnDrawGizmos()

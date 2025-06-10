@@ -389,6 +389,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   seed: 1
   maxTimestepFPS: 60
+  iterationsPerFrame: 3
+  slowMode: 0
+  slowTimeScale: 0.1
+  normalTimeScale: 5
   temperature: 25
   dewPoint: 23
   wind:
