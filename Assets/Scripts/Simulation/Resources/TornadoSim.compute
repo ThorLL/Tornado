@@ -38,11 +38,16 @@ float TornadoHeight;
 float StormTop;
 float pcf; // CoreFunnelPressure
 
+// Despawn
+int DespawnTime;
+float SpawnArea;
+
 //------------------------------------------------------------
 // Input Buffers
 //------------------------------------------------------------
 RWStructuredBuffer<float3> Positions;
 RWStructuredBuffer<float3> Velocities;
+RWStructuredBuffer<int> LiftSpans;
 
 //------------------------------------------------------------
 // Input Textures
@@ -170,6 +175,28 @@ float3 CalculateForces(uint id, float3 position, float3 velocity,
     return forces;
 }
 
+void HandleDespawn(uint id, inout float3 position, inout float3 velocity)
+{
+    if (DespawnTime <= 0) return;
+    
+    int currentLifeSpan = LiftSpans[id];
+    if (currentLifeSpan > DespawnTime)
+    {
+        uint seed = id;
+        float2 spawnPoint = NextFloat2Direction(seed) * NextFloat(seed) * SpawnArea / 2;
+
+        position = float3(spawnPoint.x, NextFloat(seed) * SpawnArea, spawnPoint.y);
+
+        LiftSpans[id] = -1;
+        velocity = float3(0.0f, 0.0f, 0.0f);
+    }
+    else if (currentLifeSpan > 0 || position.y > TornadoHeight * 0.95f)
+    {
+        LiftSpans[id] += 1;
+        if (position.y > StormTop) LiftSpans[id] += 5;
+    }
+}
+
 void HandleBounds(inout float3 position, inout float3 velocity)
 {
     if (position.y < 1) position.y = 1;
@@ -187,6 +214,7 @@ void UpdateParticles (uint3 id : SV_DispatchThreadID)
     float3 velocity = Velocities[id.x];
 
     HandleBounds(position, velocity);
+    HandleDespawn(id.x, position, velocity);
 
     float dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius;
     SampleEnvironment(id.x, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);

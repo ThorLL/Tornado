@@ -405,6 +405,7 @@ MonoBehaviour:
     y: 0
   tornadoWindShear: 1
   tornadoWindShearJitter: 0.01
+  despawnTime: -1
   spawner: {fileID: 2017212927}
 --- !u!114 &2017212927
 MonoBehaviour:

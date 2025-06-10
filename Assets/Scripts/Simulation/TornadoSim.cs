@@ -30,13 +30,17 @@ namespace Simulation
         public float tornadoWindShear = 1f;
         public float tornadoWindShearJitter = 0.01f;
         
+        [Header("Despawn")]
+        public int despawnTime = -1;
+
         [Header("References")]
         public Spawner spawner;
         ComputeShader _simulation;
 
         public ComputeBuffer PositionBuffer;
         public ComputeBuffer VelocityBuffer;
-        
+        public ComputeBuffer LiftSpanBuffer;
+
         Unity.Mathematics.Random _prng;
         
         void Start()
@@ -52,13 +56,19 @@ namespace Simulation
 
             PositionBuffer?.Release();
             VelocityBuffer?.Release();
+            LiftSpanBuffer?.Release();
             
             (float3[] points, float3[] velocities) = spawner.GetSpawnData();
+            int[] lifeSpans = new int[points.Length];
+            for (int i = 0; i < points.Length; i++) lifeSpans[i] = -1;
+            
             PositionBuffer = ComputeHelper.CreateStructuredBuffer(points);
             VelocityBuffer = ComputeHelper.CreateStructuredBuffer(velocities);
+            LiftSpanBuffer = ComputeHelper.CreateStructuredBuffer(lifeSpans);
 
             _simulation.SetBuffer(0, "Positions", PositionBuffer);
             _simulation.SetBuffer(0, "Velocities", VelocityBuffer);
+            _simulation.SetBuffer(0, "LiftSpans", LiftSpanBuffer);
             
             _simulation.SetInt("numParticles", PositionBuffer.count);
             
@@ -108,6 +118,10 @@ namespace Simulation
             _simulation.SetFloat("TornadoHeight", tornadoHeight);
             _simulation.SetFloat("StormTop", stormTop);
             _simulation.SetFloat("pcf", coreFunnelPressure);
+            
+            // Despawn
+            _simulation.SetInt("DespawnTime", despawnTime);
+            _simulation.SetFloat("SpawnArea", spawner.size);
         }
         
         void RunSimulationFrame()
@@ -151,6 +165,7 @@ namespace Simulation
         {
             PositionBuffer.Release();
             VelocityBuffer.Release();
+            LiftSpanBuffer.Release();
         }
     }
 }
