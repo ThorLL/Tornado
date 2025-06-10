@@ -11,6 +11,7 @@ namespace Simulation
         public uint seed = 1;
         
         [Header("Runtime")]
+        public bool pause;
         public float maxTimestepFPS = 60;
         public int iterationsPerFrame = 3;
         public bool slowMode;
@@ -83,6 +84,7 @@ namespace Simulation
         
         void Update()
         {
+            if (pause) return;
             float maxDeltaTime = maxTimestepFPS > 0 ? 1 / maxTimestepFPS : float.PositiveInfinity; // If framerate dips too low, run the simulation slower than real-time
             float dt = Mathf.Min(Time.deltaTime, maxDeltaTime);
             dt *= ActiveTimeScale;
