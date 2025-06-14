@@ -18,6 +18,9 @@ uint numParticles;
 // Run time
 float DeltaTime;
 
+// Caching
+int RunMode;
+
 // Environment
 float GroundTemperatureKelvin;
 float DewPoint;
@@ -49,6 +52,12 @@ RWStructuredBuffer<float3> Positions;
 RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<int> LiftSpans;
 
+StructuredBuffer<float> Pressures;
+StructuredBuffer<float> AirDensities;
+StructuredBuffer<float> MaxWindSpeeds;
+StructuredBuffer<float> MaxPressureDeficits;
+StructuredBuffer<float> TornadoRadii;
+
 //------------------------------------------------------------
 // Input Textures
 //------------------------------------------------------------
@@ -64,7 +73,7 @@ RWStructuredBuffer<int> LiftSpans;
 //------------------------------------------------------------
 // Helper Functions
 //------------------------------------------------------------
-void SampleEnvironment(uint id, float3 position,
+void SampleEnvironmentDynamically(uint id, float3 position,
     out float dist,
     out float distanceRatio,
     out float pressure,
@@ -90,8 +99,8 @@ void SampleEnvironment(uint id, float3 position,
         maxWindSpeed = 0.0f; // TODO figure out what the max wind speed is above the tornado
     }
      
-    float maxPressuresDeficit = MaxPressureDeficit(maxWindSpeed, airDensity);
-    tornadoRadius = CoreRadius(pressure, pcf, maxPressuresDeficit, maxWindSpeed, GroundTemperatureKelvin);
+    float maxPressureDeficit = MaxPressureDeficit(maxWindSpeed, airDensity);
+    tornadoRadius = CoreRadius(pressure, pcf, maxPressureDeficit, maxWindSpeed, GroundTemperatureKelvin);
 
     dist = distance(Tornado, position.xz);
     
@@ -99,7 +108,38 @@ void SampleEnvironment(uint id, float3 position,
     distanceRatio = inSideCore ? dist / tornadoRadius : tornadoRadius / dist;
 
     windSpeed = WindSpeed(maxWindSpeed, distanceRatio);
-    pressureDeficit = PressureDeficit(maxPressuresDeficit, distanceRatio, inSideCore);
+    pressureDeficit = PressureDeficit(maxPressureDeficit, distanceRatio, inSideCore);
+}
+
+void SampleEnvironmentCached(uint id, float3 position,
+    out float dist,
+    out float distanceRatio,
+    out float pressure,
+    out float airDensity,
+    out float windSpeed,
+    out float pressureDeficit,
+    out float tornadoRadius
+)
+{
+    if (position.y > TornadoHeight)
+    {
+        SampleEnvironmentDynamically(id, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
+        return;
+    }
+    int altitude = floor(position.y);
+    pressure = Pressures[altitude];
+    airDensity = AirDensities[altitude];
+    float maxWindSpeed = MaxWindSpeeds[altitude];
+    float maxPressureDeficit = MaxPressureDeficits[altitude];
+    tornadoRadius = TornadoRadii[altitude];
+
+    dist = distance(Tornado, position.xz);
+    
+    bool inSideCore = dist < tornadoRadius;
+    distanceRatio = inSideCore ? dist / tornadoRadius : tornadoRadius / dist;
+
+    windSpeed = WindSpeed(maxWindSpeed, distanceRatio);
+    pressureDeficit = PressureDeficit(maxPressureDeficit, distanceRatio, inSideCore);
 }
 
 float3 CalculateForces(uint id, float3 position, float3 velocity,
@@ -217,7 +257,14 @@ void UpdateParticles (uint3 id : SV_DispatchThreadID)
     HandleDespawn(id.x, position, velocity);
 
     float dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius;
-    SampleEnvironment(id.x, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
+    if (RunMode == 0)
+    {
+        SampleEnvironmentDynamically(id.x, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
+    }
+    else
+    {
+        SampleEnvironmentCached(id.x, position, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
+    }
 
     float3 forces = CalculateForces(id.x, position, velocity, dist, distanceRatio, pressure, airDensity, windSpeed, pressureDeficit, tornadoRadius);
 
