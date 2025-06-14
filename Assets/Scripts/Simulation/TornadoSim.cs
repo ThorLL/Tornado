@@ -10,8 +10,9 @@ namespace Simulation
         [Header("General")] 
         public uint seed = 1;
         public bool restart;
-        
-        [Header("Runtime")]
+
+        [Header("Runtime")] 
+        public RunModes runMode;
         public bool pause;
         public float maxTimestepFPS = 60;
         public int iterationsPerFrame = 3;
@@ -48,7 +49,17 @@ namespace Simulation
         public ComputeBuffer PositionBuffer;
         public ComputeBuffer VelocityBuffer;
         public ComputeBuffer LiftSpanBuffer;
+        
+        // Caching buffers
+        public ComputeBuffer PressuresBuffer;
+        public ComputeBuffer AirDensitiesBuffer;
+        public ComputeBuffer MaxWindSpeedsBuffer;
+        public ComputeBuffer MaxPressureDeficitsBuffer;
+        public ComputeBuffer TornadoRadiiBuffer;
 
+        bool _cacheNeedsUpdating;
+        float _lastTemp, _lastDewPoint;
+        
         Unity.Mathematics.Random _prng;
         
         void Start()
@@ -80,8 +91,70 @@ namespace Simulation
             _simulation.SetBuffer(0, "LiftSpans", LiftSpanBuffer);
             
             _simulation.SetInt("numParticles", PositionBuffer.count);
-            
+            CreateEnvironmentCache();
             UpdateSettings(maxTimestepFPS > 0 ? 1 / maxTimestepFPS : math.EPSILON);
+        }
+        
+        void CreateEnvironmentCache()
+        {
+            TMath.TornadoDetails(temperature, dewPoint, 
+                out float groundTemperatureKelvin,
+                out float coreFunnelPressure,
+                out float tornadoHeight,
+                out float _
+            );
+            int height = (int)math.ceil(tornadoHeight);
+            
+            float[] pressures = new float[height];
+            float[] airDensities = new float[height];
+            float[] maxWindSpeeds = new float[height];
+            float[] maxPressureDeficits = new float[height];
+            float[] tornadoRadii = new float[height];
+            
+            for (int i = 0; i < height; i++)
+            {
+                float altitudinalTemperature = TMath.TemperatureAtAltitude(i, groundTemperatureKelvin);
+                float altitudinalDewPoint = TMath.DewPointAtAltitude(i, dewPoint);
+                float pressure = TMath.AltitudeToPressure(i, groundTemperatureKelvin);
+                float airDensity = TMath.AirDensity(altitudinalTemperature, altitudinalDewPoint, pressure);
+                float maxWindSpeed = TMath.MaxWindSpeed(pressure, airDensity, coreFunnelPressure);
+                float maxPressuresDeficit = TMath.MaxPressureDeficit(maxWindSpeed, airDensity);
+                float radius = TMath.CoreRadius(pressure, coreFunnelPressure, maxPressuresDeficit, maxWindSpeed, groundTemperatureKelvin);
+                
+                pressures[i] = pressure;
+                airDensities[i] = airDensity;
+                maxWindSpeeds[i] = maxWindSpeed;
+                maxPressureDeficits[i] = maxPressuresDeficit;
+                tornadoRadii[i] = radius;
+            }
+            
+            PressuresBuffer = ComputeHelper.CreateStructuredBuffer(pressures);
+            AirDensitiesBuffer = ComputeHelper.CreateStructuredBuffer(airDensities);
+            MaxWindSpeedsBuffer = ComputeHelper.CreateStructuredBuffer(maxWindSpeeds);
+            MaxPressureDeficitsBuffer = ComputeHelper.CreateStructuredBuffer(maxPressureDeficits);
+            TornadoRadiiBuffer = ComputeHelper.CreateStructuredBuffer(tornadoRadii);
+            
+            _simulation.SetBuffer(0, "Pressures", PressuresBuffer);
+            _simulation.SetBuffer(0, "AirDensities", AirDensitiesBuffer);
+            _simulation.SetBuffer(0, "MaxWindSpeeds", MaxWindSpeedsBuffer);
+            _simulation.SetBuffer(0, "MaxPressureDeficits", MaxPressureDeficitsBuffer);
+            _simulation.SetBuffer(0, "TornadoRadii", TornadoRadiiBuffer);
+        }
+
+        void UpdateCache()
+        {
+            if (!Mathf.Approximately(_lastTemp, temperature) || !Mathf.Approximately(_lastDewPoint, dewPoint))
+            {
+                _lastTemp = temperature;
+                _lastDewPoint = dewPoint;
+                _cacheNeedsUpdating = true;
+            }
+
+            if (_cacheNeedsUpdating && runMode is RunModes.Cached)
+            {
+                CreateEnvironmentCache();
+                _cacheNeedsUpdating = false;
+            }
         }
         
         void Update()
@@ -105,17 +178,18 @@ namespace Simulation
         void UpdateSettings(float stepDeltaTime)
         {
             // Precompute static tornado values
-            float groundTemperatureKelvin = TMath.CToKelvin(temperature);
-            float coreFunnelPressure = TMath.CoreFunnelPressure(groundTemperatureKelvin, dewPoint);
-            float groundAirDensity = TMath.AirDensity(groundTemperatureKelvin, dewPoint, TMath.AtmosphericPressure);
-            float maxWindSpeed = TMath.MaxWindSpeed(TMath.AtmosphericPressure, groundAirDensity, coreFunnelPressure);
-            float maxPressuresDeficit = TMath.MaxPressureDeficit(maxWindSpeed, groundAirDensity);
-            
-            float tornadoHeight = TMath.PressureToAltitude(coreFunnelPressure, groundTemperatureKelvin);
-            float stormTop = TMath.PressureToAltitude(coreFunnelPressure - maxPressuresDeficit / 2, groundTemperatureKelvin);
-
+            TMath.TornadoDetails(temperature, dewPoint, 
+                out float groundTemperatureKelvin,
+                out float coreFunnelPressure,
+                out float tornadoHeight,
+                out float stormTop
+            );
             // Run time
             _simulation.SetFloat("DeltaTime", stepDeltaTime);
+            
+            // Caching
+            _simulation.SetInt("RunMode", (int)runMode);
+            UpdateCache();
             
             // Environment
             _simulation.SetFloat("GroundTemperatureKelvin", groundTemperatureKelvin);
@@ -193,6 +267,12 @@ namespace Simulation
             PositionBuffer.Release();
             VelocityBuffer.Release();
             LiftSpanBuffer.Release();
+        }
+
+        public enum RunModes
+        {
+            Dynamic = 0,
+            Cached = 1
         }
     }
 }

@@ -69,5 +69,20 @@ namespace Tornado
         public static float CoreRadius(float altitudinalPressure, float pcf, float maxAltitudinalPressureDeficit, float maxAltitudinalWindSpeed, float groundTemperature) =>
             math.sqrt(2 * (pcf + maxAltitudinalPressureDeficit) / altitudinalPressure) / maxAltitudinalWindSpeed * PressureToAltitude(pcf - 0.5f * maxAltitudinalPressureDeficit, groundTemperature);
 
+        public static void TornadoDetails(float temperature, float dewPoint,
+            out float temperatureKelvin,
+            out float pcf, 
+            out float tornadoHeight, 
+            out float stormTop)
+        {
+            temperatureKelvin = CToKelvin(temperature);
+            pcf = CoreFunnelPressure(temperatureKelvin, dewPoint);
+            float groundAirDensity = AirDensity(temperatureKelvin, dewPoint, AtmosphericPressure);
+            float maxWindSpeed = MaxWindSpeed(AtmosphericPressure, groundAirDensity, pcf);
+            float maxPressuresDeficit = MaxPressureDeficit(maxWindSpeed, groundAirDensity);
+            
+            tornadoHeight = PressureToAltitude(pcf, temperatureKelvin);
+            stormTop = PressureToAltitude(pcf - maxPressuresDeficit / 2, temperatureKelvin);
+        }
     }
 }
