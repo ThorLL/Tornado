@@ -17,4 +17,4 @@ Hautala, Susan (2020). [Physics Across Oceanography: Fluid Mechanics and Waves](
 # 🙌 Acknowledgments
 [Sebastien Lague](https://github.com/SebLague) – for inspiring the particle physics-driven simulation engine.
 
-[Acerola](https://www.youtube.com/@Acerola_t) – for insightful on graphics and rendering.
+[Acerola](https://www.youtube.com/@Acerola_t) – for insight on graphics and rendering.
