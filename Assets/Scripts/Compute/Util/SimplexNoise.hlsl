@@ -11,15 +11,14 @@
 
 // output noise is in range [-1, 1]
 float sNoise(float2 v) {
-    const float4 C = float4(0.211324865405187f,  // (3.0-sqrt(3.0))/6.0
+    const float4 c = float4(0.211324865405187f,  // (3.0-sqrt(3.0))/6.0
                              0.366025403784439f,   // 0.5*(sqrt(3.0)-1.0)
                              -0.577350269189626f,  // -1.0 + 2.0 * C.x
                              0.024390243902439f);  // 1.0 / 41.0
 
-    float2 V = v;
     // First corner
-    float2 i  = floor(V + dot(V, C.yy));
-    float2 x0 = V -   i + dot(i, C.xx);
+    float2 i  = floor(v + dot(v, c.yy));
+    float2 x0 = v -   i + dot(i, c.xx);
 
     // Other corners
     float2 i1;
@@ -28,8 +27,8 @@ float sNoise(float2 v) {
 
     // x1 = x0 - i1  + 1.0 * C.xx;
     // x2 = x0 - 1.0 + 2.0 * C.xx;
-    float2 x1 = x0 + C.xx - i1;
-    float2 x2 = x0 + C.zz;
+    float2 x1 = x0 + c.xx - i1;
+    float2 x2 = x0 + c.zz;
 
     // Permutations
     i = mod289(i); // Avoid truncation effects in permutation
@@ -43,7 +42,7 @@ float sNoise(float2 v) {
 
     // Gradients: 41 points uniformly over a line, mapped onto a diamond.
     // The ring size 17*17 = 289 is close to a multiple of 41 (41*7 = 287)
-    float3 x = 2.0f * frac(p * C.www) - 1.0f;
+    float3 x = 2.0f * frac(p * c.www) - 1.0f;
     float3 h = abs(x) - 0.5f;
     float3 ox = floor(x + 0.5f);
     float3 a0 = x - ox;
